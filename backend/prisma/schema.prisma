@@ -1,0 +1,314 @@
+// KVR (KeyVault Registry) - Prisma Schema
+// Subset do schema do OrchestratorAI - compartilha o mesmo banco de dados
+// IMPORTANTE: NÃO executar prisma migrate - usar apenas prisma generate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USUARIOS (Shadow users para TAH)
+// ============================================
+
+model Usuario {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String?
+  fullName    String    @map("full_name")
+  status      String    @default("ativo")
+  roles       String[]  @default(["USER"])
+  perfis      String[]  @default([])
+  ativo       Boolean   @default(true)
+  isActive    Boolean   @default(true) @map("is_active")
+  firstLogin  Boolean?  @map("first_login")
+  lastLoginAt DateTime? @map("last_login_at")
+  tahUserId   String?   @unique @map("tah_user_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  organizations UserOrganization[] @relation("UserOrganizations")
+
+  @@index([email])
+  @@index([ativo])
+  @@index([tahUserId])
+  @@map("Usuario")
+}
+
+// ============================================
+// ORGANIZACOES (Multi-tenancy)
+// ============================================
+
+model Organization {
+  id        String   @id @default(uuid())
+  orgId     String   @unique @map("org_id")
+  name      String
+  settings  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  members UserOrganization[] @relation("OrganizationMembers")
+
+  @@index([name])
+  @@map("agentmaker_organizations")
+}
+
+model UserOrganization {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  role           OrgRole  @default(MEMBER)
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user         Usuario      @relation("UserOrganizations", fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation("OrganizationMembers", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([isDefault])
+  @@map("agentmaker_user_organizations")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// ============================================
+// REFRESH TOKENS (Auth Local)
+// ============================================
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("agentmaker_refresh_tokens")
+}
+
+// ============================================
+// RESOURCE REGISTRY
+// ============================================
+
+model OrchestratorResource {
+  id         String       @id @default(uuid())
+  name       String       @unique
+  type       ResourceType
+  subtype    String?
+  endpoint   String?
+  method     String?
+  connection Json?
+  auth       Json?
+  config     Json?
+  metadata   Json?
+  health     Json?
+  projectId  String?      @map("project_id")
+  orgId      String?      @map("org_id")
+  isActive   Boolean      @default(true) @map("ativo")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  // Resource Registry V2
+  env                 ResourceEnvironment @default(DEV)
+  version             Int                 @default(1)
+  parentResourceId    String?             @map("parent_resource_id")
+  sensitivity         ResourceSensitivity @default(MEDIUM)
+  visibility          ResourceVisibility  @default(PROJECT_ONLY)
+  promotionStatus     PromotionStatus?    @default(NONE) @map("promotion_status")
+  promotedAt          DateTime?           @map("promoted_at")
+  promotedBy          String?             @map("promoted_by")
+  promotionNotes      String?             @map("promotion_notes") @db.Text
+  healthCheckEnabled  Boolean             @default(false) @map("health_check_enabled")
+  healthCheckSchedule String?             @map("health_check_schedule")
+  lastHealthCheck     DateTime?           @map("last_health_check")
+  healthStatus        String?             @map("health_status")
+
+  // Parent-Child relationship (DEV -> PRD)
+  parentResource OrchestratorResource?  @relation("ResourceParentChild", fields: [parentResourceId], references: [id], onDelete: SetNull)
+  childResources OrchestratorResource[] @relation("ResourceParentChild")
+
+  @@index([type])
+  @@index([projectId])
+  @@index([orgId])
+  @@index([isActive])
+  @@index([env])
+  @@index([parentResourceId])
+  @@index([sensitivity])
+  @@index([promotionStatus])
+  @@index([healthStatus])
+  @@map("orq_recursos")
+}
+
+enum ResourceType {
+  HTTP
+  WEBHOOK
+  DB
+  FILE
+  MESSAGE
+  SLACK
+  TEAMS
+  TELEGRAM
+  REPORT
+  ALERT
+  FUNCTION
+  EMBEDDING
+  VECTOR_ENGINE
+  DATA_LAYER
+}
+
+enum ResourceEnvironment {
+  DEV
+  QA
+  HOMOLOG
+  PRD
+}
+
+enum ResourceSensitivity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ResourceVisibility {
+  PUBLIC
+  ORGANIZATION
+  PROJECT_ONLY
+  ADMIN_ONLY
+}
+
+enum PromotionStatus {
+  NONE
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+// ============================================
+// API KEYS
+// ============================================
+
+model ApiKey {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  orgId          String?   @map("org_id")
+  name           String
+  description    String?
+  keyHash        String    @unique @map("key_hash")
+  keyPrefix      String    @map("key_prefix")
+  scopes         String[]  @default(["resources:read"])
+  projectIds     String[]  @default([]) @map("project_ids")
+  workflowIds    String[]  @default([]) @map("workflow_ids")
+  rateLimit      Int       @default(1000) @map("rate_limit")
+  rateLimitUsed  Int       @default(0) @map("rate_limit_used")
+  rateLimitReset DateTime? @map("rate_limit_reset")
+  lastUsedAt     DateTime? @map("last_used_at")
+  lastUsedIp     String?   @map("last_used_ip")
+  usageCount     Int       @default(0) @map("usage_count")
+  expiresAt      DateTime? @map("expires_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  permissions    Json?
+  lastUsed       DateTime? @map("last_used")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([keyHash])
+  @@index([isActive])
+  @@index([expiresAt])
+  @@map("agentmaker_api_keys")
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  orgId        String?  @map("org_id")
+  userName     String?  @map("user_name")
+  userEmail    String?  @map("user_email")
+  action       String
+  resource     String
+  resourceId   String?  @map("resource_id")
+  resourceName String?  @map("resource_name")
+  method       String?
+  endpoint     String?
+  oldValues    Json?    @map("old_values")
+  newValues    Json?    @map("new_values")
+  changes      Json?
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  status       String   @default("SUCCESS")
+  errorMessage String?  @map("error_message")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([action])
+  @@index([resource])
+  @@index([resourceId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("agentmaker_audit_logs")
+}
+
+// ============================================
+// APP FEATURES (TAH Integration)
+// ============================================
+
+model AppFeature {
+  id          String   @id
+  name        String
+  description String?  @db.Text
+  module      String
+  path        String?
+  icon        String?
+  actions     Json     @default("[]")
+  isPublic    Boolean  @default(false) @map("is_public")
+  requiresOrg Boolean  @default(true) @map("requires_org")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([module])
+  @@index([isPublic])
+  @@map("orq_app_features")
+}
+
+// ============================================
+// PROJECTS
+// ============================================
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  status      String   @default("active")
+  orgId       String?  @map("org_id")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([orgId])
+  @@index([status])
+  @@map("orq_projects")
+}

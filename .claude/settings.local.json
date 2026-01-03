@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(ssh root@72.61.52.70 \"cat /etc/os-release | head -5\")",
+      "Bash(ssh root@72.61.52.70 \"apt-get update && apt-get install -y ca-certificates curl\")",
+      "Bash(ssh root@72.61.52.70 \"docker --version 2>/dev/null || echo ''Docker not installed''\")",
+      "Bash(ssh root@72.61.52.70:*)",
+      "Bash(rsync:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(/Users/maxcardoso/Documents/GitHub/KVR/frontend/node_modules/.bin/tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(./node_modules/.bin/prisma generate:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(python3:*)",
+      "Bash(scp:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

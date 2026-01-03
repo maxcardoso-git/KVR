@@ -1,0 +1,13 @@
+services:
+  kvr-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kvr-web
+    restart: unless-stopped
+    ports:
+      - "3080:80"
+
+networks:
+  kvr-network:
+    driver: bridge
