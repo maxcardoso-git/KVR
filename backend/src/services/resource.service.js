@@ -275,14 +275,18 @@ export async function updateResource(id, data, context = {}) {
   if (data.projectId !== undefined) payload.projectId = data.projectId || null;
 
   try {
-    // Verify ownership if orgId is provided
-    if (context.orgId) {
-      const existing = await prisma.orchestratorResource.findFirst({
-        where: { id, orgId: context.orgId }
-      });
-      if (!existing) {
-        throw new Error('Resource not found or access denied');
-      }
+    // Verify resource exists and check ownership
+    const existing = await prisma.orchestratorResource.findFirst({
+      where: { id }
+    });
+
+    if (!existing) {
+      throw new Error('Resource not found or access denied');
+    }
+
+    // Check org access: allow if resource has no org, or if orgs match
+    if (context.orgId && existing.orgId && existing.orgId !== context.orgId) {
+      throw new Error('Resource not found or access denied');
     }
 
     const resource = await prisma.orchestratorResource.update({
@@ -303,14 +307,18 @@ export async function updateResource(id, data, context = {}) {
  */
 export async function deleteResource(id, context = {}) {
   try {
-    // Verify ownership if orgId is provided
-    if (context.orgId) {
-      const existing = await prisma.orchestratorResource.findFirst({
-        where: { id, orgId: context.orgId }
-      });
-      if (!existing) {
-        throw new Error('Resource not found or access denied');
-      }
+    // Verify resource exists
+    const existing = await prisma.orchestratorResource.findFirst({
+      where: { id }
+    });
+
+    if (!existing) {
+      throw new Error('Resource not found or access denied');
+    }
+
+    // Check org access: allow if resource has no org, or if orgs match
+    if (context.orgId && existing.orgId && existing.orgId !== context.orgId) {
+      throw new Error('Resource not found or access denied');
     }
 
     await prisma.orchestratorResource.delete({
