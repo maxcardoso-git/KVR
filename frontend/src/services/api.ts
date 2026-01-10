@@ -22,6 +22,29 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
+// Helper to extract error message from API response
+function extractErrorMessage(error: AxiosError): string {
+  const data = error.response?.data as { error?: string; message?: string; required?: string[]; current?: string[] } | undefined
+
+  if (data) {
+    // Handle permission errors with details
+    if (error.response?.status === 403 && data.required && data.current) {
+      return `Permissão insuficiente. Requer: ${data.required.join(' ou ')}. Sua role: ${data.current.join(', ')}`
+    }
+    // Use error message from backend
+    if (data.error) return data.error
+    if (data.message) return data.message
+  }
+
+  // Fallback to generic messages
+  if (error.response?.status === 403) return 'Acesso negado. Você não tem permissão para esta ação.'
+  if (error.response?.status === 401) return 'Sessão expirada. Faça login novamente.'
+  if (error.response?.status === 404) return 'Recurso não encontrado.'
+  if (error.response?.status === 500) return 'Erro interno do servidor.'
+
+  return error.message || 'Erro desconhecido'
+}
+
 // Response interceptor to handle token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -59,7 +82,12 @@ api.interceptors.response.use(
       }
     }
 
-    return Promise.reject(error)
+    // Create a new error with the extracted message
+    const errorMessage = extractErrorMessage(error)
+    const enhancedError = new Error(errorMessage)
+    ;(enhancedError as Error & { originalError: AxiosError }).originalError = error
+
+    return Promise.reject(enhancedError)
   }
 )
 

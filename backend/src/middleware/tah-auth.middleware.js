@@ -6,9 +6,35 @@
  */
 
 import jwt from 'jsonwebtoken';
-import { TAH_CONFIG, SHADOW_USER_CONFIG } from '../config/auth.config.js';
+import crypto from 'crypto';
+import { TAH_CONFIG, SHADOW_USER_CONFIG, mapTahRole } from '../config/auth.config.js';
 import prisma from '../database/prisma.js';
 import logger from '../utils/logger.js';
+
+/**
+ * Convert JWK RSA key to PEM format
+ */
+function jwkToPem(jwk) {
+  if (jwk.x5c && jwk.x5c[0]) {
+    // If x5c is available, use it directly
+    return `-----BEGIN CERTIFICATE-----\n${jwk.x5c[0]}\n-----END CERTIFICATE-----`;
+  }
+
+  // Convert RSA JWK (n, e) to PEM using Node.js crypto
+  if (jwk.kty === 'RSA' && jwk.n && jwk.e) {
+    const keyObject = crypto.createPublicKey({
+      key: {
+        kty: jwk.kty,
+        n: jwk.n,
+        e: jwk.e
+      },
+      format: 'jwk'
+    });
+    return keyObject.export({ type: 'spki', format: 'pem' });
+  }
+
+  throw new Error(`Unsupported key type: ${jwk.kty}`);
+}
 
 // JWKS cache
 let jwksCache = null;
@@ -67,13 +93,7 @@ async function getSigningKey(kid) {
   }
 
   // Convert JWK to PEM format
-  // For RS256, the key should have x5c (certificate chain)
-  if (key.x5c && key.x5c[0]) {
-    return `-----BEGIN CERTIFICATE-----\n${key.x5c[0]}\n-----END CERTIFICATE-----`;
-  }
-
-  // For simpler cases, return the key as-is (jwt library handles JWK)
-  return key;
+  return jwkToPem(key);
 }
 
 /**
@@ -121,11 +141,39 @@ export async function validateTahToken(token) {
     clockTolerance: TAH_CONFIG.clockTolerance
   });
 
-  // Check if app is enabled for this user
-  const appAccess = payload.apps?.[TAH_CONFIG.appId];
-  if (!appAccess?.enabled) {
-    throw new Error(`Access to ${TAH_CONFIG.appId} not authorized`);
+  // Extract permissions - support both formats:
+  // 1. Direct permissions array in token (newer format)
+  // 2. App-specific permissions in apps object (older format)
+  let permissions = [];
+  if (payload.permissions && Array.isArray(payload.permissions)) {
+    permissions = payload.permissions;
+  } else if (payload.apps?.[TAH_CONFIG.appId]?.permissions) {
+    permissions = payload.apps[TAH_CONFIG.appId].permissions;
   }
+
+  // Extract and map roles from various possible fields
+  // TAH may send roles in different formats: roles array, role string, org_role, perfil, etc.
+  let rawRoles = [];
+
+  if (payload.roles && Array.isArray(payload.roles)) {
+    rawRoles = payload.roles;
+  } else if (payload.role) {
+    rawRoles = [payload.role];
+  } else if (payload.org_role) {
+    rawRoles = [payload.org_role];
+  } else if (payload.perfil) {
+    rawRoles = Array.isArray(payload.perfil) ? payload.perfil : [payload.perfil];
+  } else if (payload.perfis) {
+    rawRoles = Array.isArray(payload.perfis) ? payload.perfis : [payload.perfis];
+  }
+
+  // Map TAH roles to local roles (handles Portuguese names like 'administrador' -> 'ADMIN')
+  const mappedRoles = rawRoles.length > 0
+    ? rawRoles.map(r => mapTahRole(r))
+    : ['USER'];
+
+  // Log successful TAH authentication
+  logger.info(`[TAH] User authenticated: ${payload.email} with roles: ${mappedRoles.join(', ')} and ${permissions.length} permissions`);
 
   return {
     // User identification
@@ -139,11 +187,12 @@ export async function validateTahToken(token) {
     orgId: payload.org_id,
     orgName: payload.org_name,
     orgIds: payload.org_ids || [payload.org_id].filter(Boolean),
-    orgRole: payload.org_role || 'MEMBER',
+    orgRole: mapTahRole(payload.org_role) || 'MEMBER',
+    tenantId: payload.tenant_id,
 
-    // Roles and permissions
-    roles: payload.roles || ['USER'],
-    permissions: appAccess.permissions || [],
+    // Roles and permissions (mapped from TAH)
+    roles: mappedRoles,
+    permissions: permissions,
 
     // Auth metadata
     authSource: 'tah',

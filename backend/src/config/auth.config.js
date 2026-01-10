@@ -44,6 +44,36 @@ export const SHADOW_USER_CONFIG = {
   defaultRole: process.env.TAH_DEFAULT_ROLE || 'USER'
 };
 
+// Role mapping from TAH to local system
+// Maps TAH role names (case-insensitive) to local role names
+export const TAH_ROLE_MAPPING = {
+  // Portuguese role names
+  'administrador': 'ADMIN',
+  'proprietario': 'OWNER',
+  'proprietário': 'OWNER',
+  'desenvolvedor': 'DEVELOPER',
+  'usuario': 'USER',
+  'usuário': 'USER',
+  'visualizador': 'VIEWER',
+  // English role names (normalize case)
+  'admin': 'ADMIN',
+  'administrator': 'ADMIN',
+  'owner': 'OWNER',
+  'developer': 'DEVELOPER',
+  'user': 'USER',
+  'viewer': 'VIEWER',
+  'member': 'USER'
+};
+
+/**
+ * Map TAH role to local role
+ */
+export function mapTahRole(tahRole) {
+  if (!tahRole) return 'USER';
+  const normalizedRole = tahRole.toLowerCase().trim();
+  return TAH_ROLE_MAPPING[normalizedRole] || tahRole.toUpperCase();
+}
+
 // Feature flags
 export const AUTH_FEATURES = {
   // Allow API Key authentication (for workflow execution)
@@ -83,8 +113,10 @@ export default {
   TAH_CONFIG,
   LOCAL_CONFIG,
   SHADOW_USER_CONFIG,
+  TAH_ROLE_MAPPING,
   AUTH_FEATURES,
   isTahEnabled,
   isLocalEnabled,
-  getAuthModeDescription
+  getAuthModeDescription,
+  mapTahRole
 };
