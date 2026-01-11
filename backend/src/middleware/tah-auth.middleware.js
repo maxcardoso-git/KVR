@@ -155,7 +155,19 @@ export async function validateTahToken(token) {
   // TAH may send roles in different formats: roles array, role string, org_role, perfil, etc.
   let rawRoles = [];
 
-  if (payload.roles && Array.isArray(payload.roles)) {
+  // Log payload keys for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug(`[TAH] Token payload keys: ${Object.keys(payload).join(', ')}`);
+    logger.debug(`[TAH] Token payload.apps: ${JSON.stringify(payload.apps || {})}`);
+  }
+
+  // Check app-specific roles first (similar to permissions)
+  if (payload.apps?.[TAH_CONFIG.appId]?.roles) {
+    const appRoles = payload.apps[TAH_CONFIG.appId].roles;
+    rawRoles = Array.isArray(appRoles) ? appRoles : [appRoles];
+  } else if (payload.apps?.[TAH_CONFIG.appId]?.role) {
+    rawRoles = [payload.apps[TAH_CONFIG.appId].role];
+  } else if (payload.roles && Array.isArray(payload.roles)) {
     rawRoles = payload.roles;
   } else if (payload.role) {
     rawRoles = [payload.role];
@@ -165,7 +177,16 @@ export async function validateTahToken(token) {
     rawRoles = Array.isArray(payload.perfil) ? payload.perfil : [payload.perfil];
   } else if (payload.perfis) {
     rawRoles = Array.isArray(payload.perfis) ? payload.perfis : [payload.perfis];
+  } else if (payload.groups) {
+    // Some identity providers use 'groups' for roles
+    rawRoles = Array.isArray(payload.groups) ? payload.groups : [payload.groups];
+  } else if (payload.realm_access?.roles) {
+    // Keycloak-style roles
+    rawRoles = payload.realm_access.roles;
   }
+
+  // Log raw roles for debugging
+  logger.info(`[TAH] Raw roles extracted: ${JSON.stringify(rawRoles)}`)
 
   // Map TAH roles to local roles (handles Portuguese names like 'administrador' -> 'ADMIN')
   const mappedRoles = rawRoles.length > 0

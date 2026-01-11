@@ -55,14 +55,24 @@ export const TAH_ROLE_MAPPING = {
   'usuario': 'USER',
   'usuário': 'USER',
   'visualizador': 'VIEWER',
+  'gerente': 'ADMIN',
+  'gestor': 'ADMIN',
   // English role names (normalize case)
   'admin': 'ADMIN',
   'administrator': 'ADMIN',
+  'superadmin': 'ADMIN',
+  'super_admin': 'ADMIN',
+  'super-admin': 'ADMIN',
+  'sysadmin': 'ADMIN',
   'owner': 'OWNER',
   'developer': 'DEVELOPER',
+  'dev': 'DEVELOPER',
   'user': 'USER',
   'viewer': 'VIEWER',
-  'member': 'USER'
+  'member': 'USER',
+  'editor': 'DEVELOPER',
+  'manager': 'ADMIN',
+  'moderator': 'ADMIN'
 };
 
 /**
