@@ -312,3 +312,33 @@ model Project {
   @@index([status])
   @@map("orq_projects")
 }
+
+// ============================================
+// WORKFLOWS (Read-only - from OrchestratorAI)
+// ============================================
+
+model Workflow {
+  id          String         @id @default(uuid())
+  workflowId  String         @unique @map("workflow_id")
+  name        String
+  description String?
+  version     String         @default("1.0.0")
+  status      WorkflowStatus @default(DRAFT)
+  userId      String         @map("user_id")
+  orgId       String?        @map("org_id")
+  projectId   String?        @map("project_id")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([orgId])
+  @@index([status])
+  @@index([workflowId])
+  @@map("agentmaker_workflows")
+}
+
+enum WorkflowStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}

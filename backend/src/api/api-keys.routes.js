@@ -68,6 +68,7 @@ router.get('/', authenticate, async (req, res) => {
         description: true,
         keyPrefix: true,
         scopes: true,
+        workflowIds: true,
         rateLimit: true,
         usageCount: true,
         lastUsedAt: true,
@@ -105,6 +106,7 @@ router.post('/', authenticate, async (req, res) => {
       name,
       description,
       scopes = ['resources:read'],
+      workflowIds = [],
       rateLimit = 1000,
       expiresAt
     } = req.body;
@@ -131,6 +133,7 @@ router.post('/', authenticate, async (req, res) => {
         keyHash,
         keyPrefix,
         scopes,
+        workflowIds,
         rateLimit,
         expiresAt: expiresAt ? new Date(expiresAt) : null
       },
@@ -140,6 +143,7 @@ router.post('/', authenticate, async (req, res) => {
         description: true,
         keyPrefix: true,
         scopes: true,
+        workflowIds: true,
         rateLimit: true,
         expiresAt: true,
         isActive: true,
@@ -185,6 +189,7 @@ router.get('/:id', authenticate, async (req, res) => {
         description: true,
         keyPrefix: true,
         scopes: true,
+        workflowIds: true,
         rateLimit: true,
         rateLimitUsed: true,
         rateLimitReset: true,
@@ -231,6 +236,7 @@ router.patch('/:id', authenticate, async (req, res) => {
       name,
       description,
       scopes,
+      workflowIds,
       rateLimit,
       expiresAt,
       isActive
@@ -252,6 +258,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (scopes !== undefined) updateData.scopes = scopes;
+    if (workflowIds !== undefined) updateData.workflowIds = workflowIds;
     if (rateLimit !== undefined) updateData.rateLimit = rateLimit;
     if (expiresAt !== undefined) updateData.expiresAt = expiresAt ? new Date(expiresAt) : null;
     if (isActive !== undefined) updateData.isActive = isActive;
@@ -265,6 +272,7 @@ router.patch('/:id', authenticate, async (req, res) => {
         description: true,
         keyPrefix: true,
         scopes: true,
+        workflowIds: true,
         rateLimit: true,
         expiresAt: true,
         isActive: true,
@@ -467,6 +475,50 @@ router.get('/scopes/list', authenticate, (req, res) => {
     success: true,
     data: scopes
   });
+});
+
+/**
+ * List available workflows for API Key restriction
+ * GET /api/v1/api-keys/workflows/list
+ */
+router.get('/workflows/list', authenticate, async (req, res) => {
+  try {
+    const context = getTenantContext(req);
+
+    // Build where clause with tenant isolation
+    const where = {
+      status: 'PUBLISHED' // Only show published workflows
+    };
+
+    // Filter by organization if available
+    if (context.orgId) {
+      where.orgId = context.orgId;
+    }
+
+    const workflows = await prisma.workflow.findMany({
+      where,
+      select: {
+        id: true,
+        workflowId: true,
+        name: true,
+        description: true,
+        version: true,
+        projectId: true
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json({
+      success: true,
+      data: workflows
+    });
+  } catch (error) {
+    logger.error('Error listing workflows:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list workflows'
+    });
+  }
 });
 
 export default router;

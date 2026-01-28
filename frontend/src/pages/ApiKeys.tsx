@@ -47,7 +47,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import * as apiKeyService from '@/services/api-key.service'
-import type { CreateApiKeyRequest, ApiKey } from '@/services/api-key.service'
+import type { CreateApiKeyRequest, ApiKey, Workflow } from '@/services/api-key.service'
 
 const API_BASE_URL = window.location.origin
 const ITEMS_PER_PAGE = 10
@@ -69,14 +69,6 @@ const AVAILABLE_SCOPES = [
   { id: 'forms:submit', name: 'Submit Forms', description: 'Allows submitting data to published forms via external API' },
 ]
 
-// Mock workflows for restriction
-const MOCK_WORKFLOWS = [
-  { id: 'wf-001', name: 'Assistente responder Formulário' },
-  { id: 'wf-002', name: 'DIE Integration - Multi-Domain Router' },
-  { id: 'wf-003', name: 'Business Indicator Assistant' },
-  { id: 'wf-004', name: 'QA Code Agent Aquad' },
-]
-
 export default function ApiKeys() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -91,6 +83,14 @@ export default function ApiKeys() {
     queryKey: ['apiKeys'],
     queryFn: () => apiKeyService.listApiKeys(),
   })
+
+  // Fetch available workflows for restriction
+  const { data: workflowsData } = useQuery({
+    queryKey: ['workflows'],
+    queryFn: () => apiKeyService.listWorkflows(),
+  })
+
+  const workflows = workflowsData?.data || []
 
   const createMutation = useMutation({
     mutationFn: apiKeyService.createApiKey,
@@ -461,6 +461,7 @@ export default function ApiKeys() {
           <ApiKeyForm
             mode="create"
             existingNames={apiKeys.map(k => k.name)}
+            workflows={workflows}
             onSubmit={(data) => createMutation.mutate(data)}
             onCancel={() => setIsCreateOpen(false)}
             isLoading={createMutation.isPending}
@@ -476,6 +477,7 @@ export default function ApiKeys() {
               mode="edit"
               initialData={editingKey}
               existingNames={apiKeys.filter(k => k.id !== editingKey.id).map(k => k.name)}
+              workflows={workflows}
               onSubmit={(data) => updateMutation.mutate({ id: editingKey.id, data })}
               onCancel={() => setEditingKey(null)}
               isLoading={updateMutation.isPending}
@@ -1104,6 +1106,7 @@ function ApiKeyForm({
   mode,
   initialData,
   existingNames,
+  workflows,
   onSubmit,
   onCancel,
   isLoading,
@@ -1111,6 +1114,7 @@ function ApiKeyForm({
   mode: 'create' | 'edit'
   initialData?: ApiKey
   existingNames: string[]
+  workflows: Workflow[]
   onSubmit: (data: CreateApiKeyRequest) => void
   onCancel: () => void
   isLoading: boolean
@@ -1121,9 +1125,12 @@ function ApiKeyForm({
     scopes: initialData?.scopes || [],
     rateLimit: initialData?.rateLimit || 1000,
     expiresAt: initialData?.expiresAt ? initialData.expiresAt.split('T')[0] : '',
-    restrictedWorkflows: [],
+    restrictedWorkflows: initialData?.workflowIds || [],
   })
   const [nameError, setNameError] = useState<string | null>(null)
+
+  // Check if workflows:execute scope is selected
+  const hasWorkflowExecuteScope = formData.scopes.includes('workflows:execute')
 
   const validateName = (name: string) => {
     if (!name.trim()) {
@@ -1146,6 +1153,7 @@ function ApiKeyForm({
       name: formData.name,
       description: formData.description,
       scopes: formData.scopes,
+      workflowIds: hasWorkflowExecuteScope ? formData.restrictedWorkflows : [],
       rateLimit: formData.rateLimit,
       expiresAt: formData.expiresAt || undefined,
     })
@@ -1153,9 +1161,16 @@ function ApiKeyForm({
 
   const toggleScope = (scopeId: string) => {
     if (formData.scopes.includes(scopeId)) {
+      // If removing workflows:execute scope, clear restricted workflows
+      const newState: Partial<ApiKeyFormData> = {
+        scopes: formData.scopes.filter((s) => s !== scopeId),
+      }
+      if (scopeId === 'workflows:execute') {
+        newState.restrictedWorkflows = []
+      }
       setFormData({
         ...formData,
-        scopes: formData.scopes.filter((s) => s !== scopeId),
+        ...newState,
       })
     } else {
       setFormData({
@@ -1251,43 +1266,56 @@ function ApiKeyForm({
           </div>
         </div>
 
-        {/* Restrict to Specific Workflows */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Restringir a Workflows Específicos</Label>
-            {formData.restrictedWorkflows.length > 0 && (
-              <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
-                {formData.restrictedWorkflows.length} selecionado{formData.restrictedWorkflows.length > 1 ? 's' : ''}
-              </span>
+        {/* Restrict to Specific Workflows - Only show when workflows:execute scope is selected */}
+        {hasWorkflowExecuteScope && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Restringir a Workflows Específicos</Label>
+              {formData.restrictedWorkflows.length > 0 && (
+                <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
+                  {formData.restrictedWorkflows.length} selecionado{formData.restrictedWorkflows.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Deixe vazio para permitir acesso a todos os workflows. Selecione workflows específicos para restringir.
+            </p>
+            {workflows.length === 0 ? (
+              <div className="text-sm text-muted-foreground border rounded-lg p-4 text-center">
+                Nenhum workflow publicado disponível.
+              </div>
+            ) : (
+              <div className="grid gap-2 max-h-40 overflow-auto border rounded-lg p-2">
+                {workflows.map((workflow) => (
+                  <label
+                    key={workflow.id}
+                    className={cn(
+                      'flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors',
+                      formData.restrictedWorkflows.includes(workflow.id)
+                        ? 'border-primary bg-primary/5'
+                        : 'hover:bg-accent'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.restrictedWorkflows.includes(workflow.id)}
+                      onChange={() => toggleWorkflow(workflow.id)}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Workflow className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex flex-col">
+                        <span className="text-sm">{workflow.name}</span>
+                        {workflow.description && (
+                          <span className="text-xs text-muted-foreground">{workflow.description}</span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Deixe vazio para permitir acesso a todos os workflows. Selecione workflows específicos para restringir.
-          </p>
-          <div className="grid gap-2 max-h-40 overflow-auto border rounded-lg p-2">
-            {MOCK_WORKFLOWS.map((workflow) => (
-              <label
-                key={workflow.id}
-                className={cn(
-                  'flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors',
-                  formData.restrictedWorkflows.includes(workflow.id)
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:bg-accent'
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={formData.restrictedWorkflows.includes(workflow.id)}
-                  onChange={() => toggleWorkflow(workflow.id)}
-                />
-                <div className="flex items-center gap-2">
-                  <Workflow className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{workflow.name}</span>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* Rate Limit and Expiration */}
         <div className="grid grid-cols-2 gap-4">

@@ -6,6 +6,7 @@ export interface ApiKey {
   description?: string
   keyPrefix: string
   scopes: string[]
+  workflowIds?: string[]
   rateLimit: number
   rateLimitUsed?: number
   rateLimitReset?: string
@@ -16,6 +17,20 @@ export interface ApiKey {
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface Workflow {
+  id: string
+  workflowId: string
+  name: string
+  description?: string
+  version: string
+  projectId?: string
+}
+
+export interface WorkflowsResponse {
+  success: boolean
+  data: Workflow[]
 }
 
 export interface ApiKeyWithSecret extends ApiKey {
@@ -32,6 +47,7 @@ export interface CreateApiKeyRequest {
   name: string
   description?: string
   scopes?: string[]
+  workflowIds?: string[]
   rateLimit?: number
   expiresAt?: string
 }
@@ -116,6 +132,11 @@ export async function listScopes(): Promise<ScopesResponse> {
   return response.data
 }
 
+export async function listWorkflows(): Promise<WorkflowsResponse> {
+  const response = await api.get<WorkflowsResponse>('/api-keys/workflows/list')
+  return response.data
+}
+
 export default {
   listApiKeys,
   getApiKey,
@@ -125,4 +146,5 @@ export default {
   regenerateApiKey,
   getApiKeyStats,
   listScopes,
+  listWorkflows,
 }
