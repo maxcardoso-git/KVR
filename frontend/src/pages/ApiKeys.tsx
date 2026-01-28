@@ -31,7 +31,7 @@ import {
   Edit,
   ChevronLeft,
   ChevronRight,
-  Workflow,
+  Workflow as WorkflowIcon,
   HelpCircle,
   BookOpen,
   Lightbulb,
@@ -268,7 +268,7 @@ export default function ApiKeys() {
                 Resources
               </Badge>
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                <Workflow className="w-3 h-3 mr-1" />
+                <WorkflowIcon className="w-3 h-3 mr-1" />
                 Workflows
               </Badge>
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
@@ -1302,7 +1302,7 @@ function ApiKeyForm({
                       onChange={() => toggleWorkflow(workflow.id)}
                     />
                     <div className="flex items-center gap-2">
-                      <Workflow className="h-4 w-4 text-muted-foreground" />
+                      <WorkflowIcon className="h-4 w-4 text-muted-foreground" />
                       <div className="flex flex-col">
                         <span className="text-sm">{workflow.name}</span>
                         {workflow.description && (
